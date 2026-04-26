@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Perfil - Goiás PVC</title>
+<link rel="stylesheet" href="./style.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<script src="./js/auth.js"></script>
+</head>
+<body>
+
+<header class="topbar">
+  <a href="./index.html" class="topbar-brand">
+    <div class="brand-icon"><i class="fas fa-calculator"></i></div>
+    <span>Goiás PVC</span>
+  </a>
+  <nav class="topbar-nav">
+    <a href="./pages/forro.html"><i class="fas fa-layer-group"></i><span>Forro</span></a>
+    <a href="./pages/drywall.html"><i class="fas fa-th-large"></i><span>Drywall</span></a>
+    <a href="./pages/naval.html"><i class="fas fa-border-all"></i><span>Naval</span></a>
+  </nav>
+  <div class="topbar-user">
+    <div style="position:relative;">
+      <div class="avatar" id="avatarBtn" onclick="toggleMenu()">?</div>
+      <div class="user-menu" id="dropMenu">
+        <div class="user-menu-name" id="menuName">—</div>
+        <a href="./profile.html" class="active"><i class="fas fa-user-cog"></i> Meu Perfil</a>
+        <button onclick="doLogout()"><i class="fas fa-sign-out-alt"></i> Sair</button>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main class="main">
+  <a href="./index.html" class="back-link">
+    <i class="fas fa-arrow-left"></i> Voltar ao menu
+  </a>
+
+  <div class="card">
+    <div class="profile-head">
+      <div class="profile-av" id="av">?</div>
+      <div class="profile-info">
+        <h2 id="pName">—</h2>
+        <p id="pUsername">—</p>
+      </div>
+    </div>
+
+    <div class="msg msg-success" id="successMsg"></div>
+    <div class="msg msg-error" id="errorMsg"></div>
+
+    <p class="section-label">Dados da Conta</p>
+    <form id="profileForm">
+      <div class="input-group">
+        <label>Nome</label>
+        <input type="text" id="name" placeholder="Seu nome">
+      </div>
+      <div class="input-group">
+        <label>Telefone</label>
+        <input type="tel" id="phone" placeholder="(62) 99999-9999">
+      </div>
+      <button type="submit" class="btn btn-green"><i class="fas fa-save"></i> Salvar</button>
+    </form>
+
+    <p class="section-label">Alterar Senha</p>
+    <form id="passForm">
+      <div class="input-group">
+        <label>Senha Atual</label>
+        <input type="password" id="curPass" placeholder="••••••••">
+      </div>
+      <div class="input-group">
+        <label>Nova Senha</label>
+        <input type="password" id="newPass" placeholder="••••••••" minlength="6">
+      </div>
+      <button type="submit" class="btn btn-outline"><i class="fas fa-key"></i> Alterar Senha</button>
+    </form>
+
+    <button class="btn btn-danger-outline" onclick="doLogout()">
+      <i class="fas fa-sign-out-alt"></i> Sair da Conta
+    </button>
+  </div>
+</main>
+
+<script>
+const user = Auth.getCurrentUser();
+if (!user) { window.location.href = './login.html'; }
+
+document.getElementById('av').textContent = user.name.charAt(0).toUpperCase();
+document.getElementById('avatarBtn').textContent = user.name.charAt(0).toUpperCase();
+document.getElementById('menuName').textContent = user.name;
+document.getElementById('pName').textContent = user.name;
+document.getElementById('pUsername').textContent = '@' + user.username;
+document.getElementById('name').value = user.name;
+document.getElementById('phone').value = user.phone || '';
+
+function showMsg(type, text) {
+  const el = document.getElementById(type + 'Msg');
+  el.textContent = text; el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 3000);
+}
+
+document.getElementById('profileForm').addEventListener('submit', function(e) {
+  e.preventDefault();
+  const r = Auth.updateProfile(
+    document.getElementById('name').value.trim(),
+    document.getElementById('phone').value.trim()
+  );
+  if (r.success) {
+    document.getElementById('av').textContent = r.user.name.charAt(0).toUpperCase();
+    document.getElementById('avatarBtn').textContent = r.user.name.charAt(0).toUpperCase();
+    document.getElementById('pName').textContent = r.user.name;
+    showMsg('success', 'Perfil atualizado com sucesso!');
+  }
+});
+
+document.getElementById('passForm').addEventListener('submit', async function(e) {
+  e.preventDefault();
+  const r = await Auth.changePassword(
+    document.getElementById('curPass').value,
+    document.getElementById('newPass').value
+  );
+  if (r.success) { showMsg('success', 'Senha alterada com sucesso!'); this.reset(); }
+  else showMsg('error', r.message);
+});
+
+function toggleMenu() { document.getElementById('dropMenu').classList.toggle('open'); }
+document.addEventListener('click', e => {
+  if (!e.target.closest('.topbar-user')) {
+    document.getElementById('dropMenu')?.classList.remove('open');
+  }
+});
+function doLogout() { Auth.logout(); window.location.href = './login.html'; }
+</script>
+</body>
+</html>

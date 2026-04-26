@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Login - Goiás PVC</title>
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<script src="js/auth.js"></script>
+</head>
+<body class="login-page">
+
+<div class="login-card card">
+  <div class="login-header">
+    <div class="login-logo"><i class="fas fa-calculator"></i></div>
+    <h1>Goiás PVC</h1>
+    <p>Acesse o painel profissional de cálculos</p>
+  </div>
+
+  <div class="msg msg-error" id="error"></div>
+
+  <form id="loginForm">
+    <div class="form-group">
+      <label for="username">Usuário</label>
+      <div class="input-icon">
+        <i class="fas fa-user"></i>
+        <input type="text" id="username" placeholder="Nome de usuário" autocomplete="username" required>
+      </div>
+    </div>
+    <div class="form-group">
+      <label for="password">Senha</label>
+      <div class="input-icon">
+        <i class="fas fa-lock"></i>
+        <input type="password" id="password" placeholder="••••••••" autocomplete="current-password" required>
+      </div>
+    </div>
+    <button type="submit" class="btn btn-green">
+      <i class="fas fa-sign-in-alt"></i> Entrar
+    </button>
+  </form>
+</div>
+
+<script>
+if (Auth.isLoggedIn()) window.location.href = "index.html";
+
+document.getElementById("loginForm").addEventListener("submit", async function(e) {
+  e.preventDefault();
+  const username = document.getElementById("username").value.trim();
+  const password = document.getElementById("password").value;
+  const errEl = document.getElementById("error");
+  const submitBtn = this.querySelector("button[type='submit']");
+  errEl.classList.remove("show");
+  submitBtn.disabled = true;
+  submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Entrando...';
+
+  const result = await Auth.login(username, password);
+  if (result.success) {
+    sessionStorage.setItem("toast", "Bem-vindo, " + result.user.name + "!");
+    window.location.href = "index.html";
+  } else {
+    errEl.textContent = result.message;
+    errEl.classList.add("show");
+    submitBtn.disabled = false;
+    submitBtn.innerHTML = '<i class="fas fa-sign-in-alt"></i> Entrar';
+  }
+});
+</script>
+</body>
+</html>

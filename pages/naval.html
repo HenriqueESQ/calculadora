@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Divisória Naval - Goiás PVC</title>
+<link rel="stylesheet" href="../style.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="../js/auth.js"></script>
+<script src="../js/history.js"></script>
+<script src="../js/naval.js"></script>
+<script src="../js/pdf.js"></script>
+</head>
+<body>
+
+<header class="topbar">
+  <a href="../index.html" class="topbar-brand">
+    <div class="brand-icon"><i class="fas fa-calculator"></i></div>
+    <span>Goiás PVC</span>
+  </a>
+  <nav class="topbar-nav">
+    <a href="forro.html"><i class="fas fa-layer-group"></i><span>Forro</span></a>
+    <a href="drywall.html"><i class="fas fa-th-large"></i><span>Drywall</span></a>
+    <a href="naval.html" class="active"><i class="fas fa-border-all"></i><span>Naval</span></a>
+  </nav>
+  <div class="topbar-user">
+    <div style="position:relative;">
+      <div class="avatar" id="avatarBtn" onclick="toggleMenu()">?</div>
+      <div class="user-menu" id="dropMenu">
+        <div class="user-menu-name" id="menuName">—</div>
+        <a href="../profile.html"><i class="fas fa-user-cog"></i> Meu Perfil</a>
+        <button onclick="doLogout()"><i class="fas fa-sign-out-alt"></i> Sair</button>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main class="main">
+  <a href="../index.html" class="back-link">
+    <i class="fas fa-arrow-left"></i> Voltar ao menu
+  </a>
+
+  <div class="card">
+    <div class="card-title">
+      <div class="ct-icon"><i class="fas fa-border-all"></i></div>
+      <h2>Divisória Naval</h2>
+    </div>
+
+    <div class="input-group">
+      <label>Largura (m)</label>
+      <input type="number" id="largura" placeholder="Ex: 5.00" step="0.01" inputmode="decimal">
+    </div>
+    <div class="input-group">
+      <label>Altura (m)</label>
+      <input type="number" id="altura" placeholder="Ex: 2.80" step="0.01" inputmode="decimal">
+    </div>
+
+    <button class="btn btn-green" onclick="calcular()">
+      <i class="fas fa-calculator"></i> Calcular
+    </button>
+    <p class="hint">Resultado considera modulação comercial e perdas de montagem.</p>
+
+    <div id="resultado"></div>
+    <div id="historyRoot"></div>
+  </div>
+</main>
+
+<script>
+const user = Auth.getCurrentUser();
+if (!user) { window.location.href = '../login.html'; }
+document.getElementById('avatarBtn').textContent = user.name.charAt(0).toUpperCase();
+document.getElementById('menuName').textContent = user.name;
+
+let lastResult = null;
+const CALC_TYPE = "naval";
+
+function parseMetricValue(inputId) {
+  const raw = document.getElementById(inputId).value.trim();
+  if (!raw) return NaN;
+  const normalized = raw.replace(",", ".");
+  return Number.parseFloat(normalized);
+}
+
+function formatDateTime(iso) {
+  return new Date(iso).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
+}
+
+function renderHistory() {
+  const list = CalcHistory.getHistoryByType(CALC_TYPE).slice(0, 5);
+  const root = document.getElementById("historyRoot");
+
+  if (list.length === 0) {
+    root.innerHTML = `
+      <div class="history">
+        <div class="history-head">
+          <div class="history-title">Histórico recente</div>
+          <button class="history-clear" onclick="clearHistory()">Limpar</button>
+        </div>
+        <div class="history-list"><div class="history-empty">Nenhum cálculo salvo ainda.</div></div>
+      </div>
+    `;
+    return;
+  }
+
+  root.innerHTML = `
+    <div class="history">
+      <div class="history-head">
+        <div class="history-title">Histórico recente</div>
+        <button class="history-clear" onclick="clearHistory()">Limpar</button>
+      </div>
+      <div class="history-list">
+        ${list.map(item => `
+          <div class="history-item">
+            <div>
+              <div class="history-item-strong">${item.inputs.largura} x ${item.inputs.altura} m</div>
+              <div class="history-item-meta">${formatDateTime(item.createdAt)}</div>
+            </div>
+            <button class="history-use" onclick="useHistory('${item.id}')">Reaplicar</button>
+          </div>
+        `).join("")}
+      </div>
+    </div>
+  `;
+}
+
+function useHistory(id) {
+  const entry = CalcHistory.getHistoryByType(CALC_TYPE).find(item => item.id === id);
+  if (!entry) return;
+  document.getElementById("largura").value = entry.inputs.largura;
+  document.getElementById("altura").value = entry.inputs.altura;
+  calcular();
+}
+
+function clearHistory() {
+  CalcHistory.clearHistoryByType(CALC_TYPE);
+  renderHistory();
+}
+
+function renderResult(r) {
+  const el = document.getElementById('resultado');
+  lastResult = r;
+  const conferenciaHtml = (r.conferencias || [])
+    .map(item => `<li>${item}</li>`)
+    .join("");
+  el.innerHTML = `
+    <div class="result">
+      <div class="result-head">Resultado</div>
+      <div class="result-item"><span class="label">Painéis</span><span class="value">${r.paineis}</span></div>
+      <div class="result-item"><span class="label">Guias</span><span class="value">${r.guias}</span></div>
+      <div class="result-item"><span class="label">Travessas</span><span class="value">${r.travessas}</span></div>
+      <div class="conferencia">
+        <div class="conferencia-title">Conta aplicada</div>
+        <ul class="conferencia-list">${conferenciaHtml}</ul>
+      </div>
+      <div class="result-pdf">
+        <button class="btn btn-outline" onclick="gerarPDF()">
+          <i class="fas fa-file-pdf"></i> Exportar PDF
+        </button>
+      </div>
+    </div>`;
+}
+
+function calcular(persist = true) {
+  const l = parseMetricValue("largura");
+  const a = parseMetricValue("altura");
+  const el = document.getElementById('resultado');
+
+  if (isNaN(l) || isNaN(a) || l <= 0 || a <= 0) {
+    el.innerHTML = '<p style="color:#dc2626;font-size:0.85rem;margin-top:12px;"><i class="fas fa-exclamation-circle"></i> Preencha valores válidos.</p>';
+    return;
+  }
+
+  const r = calcularNaval(l, a);
+  renderResult(r);
+  if (persist) {
+    CalcHistory.saveCalculation(CALC_TYPE, {
+      inputs: { largura: l, altura: a },
+      result: r
+    });
+  }
+  renderHistory();
+}
+
+function gerarPDF() {
+  if (!lastResult) return;
+  generatePDF('naval', {
+    'Painéis': lastResult.paineis,
+    'Guias': lastResult.guias,
+    'Travessas': lastResult.travessas
+  }, user);
+}
+
+function toggleMenu() { document.getElementById('dropMenu').classList.toggle('open'); }
+document.addEventListener('click', e => {
+  if (!e.target.closest('.topbar-user')) {
+    document.getElementById('dropMenu')?.classList.remove('open');
+  }
+});
+function doLogout() { Auth.logout(); window.location.href = '../login.html'; }
+
+(function bootstrapHistory() {
+  renderHistory();
+})();
+</script>
+</body>
+</html>

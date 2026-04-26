@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Forro PVC - Goiás PVC</title>
+<link rel="stylesheet" href="../style.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script src="../js/auth.js"></script>
+<script src="../js/history.js"></script>
+<script src="../js/forro.js"></script>
+<script src="../js/forro-3d.js"></script>
+<script src="../js/pdf.js"></script>
+</head>
+<body>
+
+<header class="topbar">
+  <a href="../index.html" class="topbar-brand">
+    <div class="brand-icon"><i class="fas fa-calculator"></i></div>
+    <span>Goiás PVC</span>
+  </a>
+  <nav class="topbar-nav">
+    <a href="forro.html" class="active"><i class="fas fa-layer-group"></i><span>Forro</span></a>
+    <a href="drywall.html"><i class="fas fa-th-large"></i><span>Drywall</span></a>
+    <a href="naval.html"><i class="fas fa-border-all"></i><span>Naval</span></a>
+  </nav>
+  <div class="topbar-user">
+    <div style="position:relative;">
+      <div class="avatar" id="avatarBtn" onclick="toggleMenu()">?</div>
+      <div class="user-menu" id="dropMenu">
+        <div class="user-menu-name" id="menuName">—</div>
+        <a href="../profile.html"><i class="fas fa-user-cog"></i> Meu Perfil</a>
+        <button onclick="doLogout()"><i class="fas fa-sign-out-alt"></i> Sair</button>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main class="main">
+  <a href="../index.html" class="back-link">
+    <i class="fas fa-arrow-left"></i> Voltar ao menu
+  </a>
+
+  <div class="card">
+    <div class="card-title">
+      <div class="ct-icon"><i class="fas fa-layer-group"></i></div>
+      <h2>Forro PVC</h2>
+    </div>
+
+    <div class="input-group">
+      <label>Largura (m)</label>
+      <input type="number" id="largura" placeholder="Ex: 5.00" step="0.01" inputmode="decimal">
+    </div>
+    <div class="input-group">
+      <label>Comprimento (m)</label>
+      <input type="number" id="comprimento" placeholder="Ex: 8.00" step="0.01" inputmode="decimal">
+    </div>
+    <div class="input-group">
+      <label>Tamanho da barra de arremate</label>
+      <select id="barraArremate">
+        <option value="6">6 m</option>
+        <option value="7">7 m</option>
+      </select>
+    </div>
+    <div class="input-group">
+      <label>Sentido de instalação das placas</label>
+      <select id="orientacaoPlaca">
+        <option value="horizontal">Horizontal (largura → placas)</option>
+        <option value="vertical">Vertical (comprimento → placas)</option>
+      </select>
+    </div>
+
+    <button class="btn btn-green" onclick="calcular()">
+      <i class="fas fa-calculator"></i> Calcular
+    </button>
+    <p class="hint">Precisão técnica: arredondamentos por peça comercial + 10% de perda.</p>
+
+    <div id="resultado"></div>
+    <div id="historyRoot"></div>
+    <div class="preview-3d-wrap">
+      <div class="preview-3d-head">
+        <div class="preview-3d-title">Visual 3D</div>
+        <div class="preview-3d-note">arraste para orbitar • scroll para zoom</div>
+      </div>
+      <div id="preview3d" class="preview-3d-canvas"></div>
+    </div>
+  </div>
+</main>
+
+<script>
+const user = Auth.getCurrentUser();
+if (!user) { window.location.href = '../login.html'; }
+document.getElementById('avatarBtn').textContent = user.name.charAt(0).toUpperCase();
+document.getElementById('menuName').textContent = user.name;
+
+let lastResult = null;
+const CALC_TYPE = "forro";
+const preview3D = new Forro3DPreview("preview3d");
+
+function parseMetricValue(inputId) {
+  const raw = document.getElementById(inputId).value.trim();
+  if (!raw) return NaN;
+  const normalized = raw.replace(",", ".");
+  return Number.parseFloat(normalized);
+}
+
+function formatDateTime(iso) {
+  return new Date(iso).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
+}
+
+function renderHistory() {
+  const list = CalcHistory.getHistoryByType(CALC_TYPE).slice(0, 5);
+  const root = document.getElementById("historyRoot");
+
+  if (list.length === 0) {
+    root.innerHTML = `
+      <div class="history">
+        <div class="history-head">
+          <div class="history-title">Histórico recente</div>
+          <button class="history-clear" onclick="clearHistory()">Limpar</button>
+        </div>
+        <div class="history-list"><div class="history-empty">Nenhum cálculo salvo ainda.</div></div>
+      </div>
+    `;
+    return;
+  }
+
+  root.innerHTML = `
+    <div class="history">
+      <div class="history-head">
+        <div class="history-title">Histórico recente</div>
+        <button class="history-clear" onclick="clearHistory()">Limpar</button>
+      </div>
+      <div class="history-list">
+        ${list.map(item => `
+          <div class="history-item">
+            <div>
+              <div class="history-item-strong">${item.inputs.largura} x ${item.inputs.comprimento} m</div>
+              <div class="history-item-meta">${formatDateTime(item.createdAt)} • Barra ${item.inputs.barraArremate}m • ${item.inputs.orientacaoPlaca === "vertical" ? "Vertical" : "Horizontal"}</div>
+            </div>
+            <button class="history-use" onclick="useHistory('${item.id}')">Reaplicar</button>
+          </div>
+        `).join("")}
+      </div>
+    </div>
+  `;
+}
+
+function useHistory(id) {
+  const entry = CalcHistory.getHistoryByType(CALC_TYPE).find(item => item.id === id);
+  if (!entry) return;
+  document.getElementById("largura").value = entry.inputs.largura;
+  document.getElementById("comprimento").value = entry.inputs.comprimento;
+  document.getElementById("barraArremate").value = String(entry.inputs.barraArremate || 6);
+  document.getElementById("orientacaoPlaca").value = entry.inputs.orientacaoPlaca || "horizontal";
+  calcular();
+}
+
+function clearHistory() {
+  CalcHistory.clearHistoryByType(CALC_TYPE);
+  renderHistory();
+}
+
+function update3DFromInputs() {
+  const l = parseMetricValue("largura");
+  const c = parseMetricValue("comprimento");
+  const orientacaoPlaca = document.getElementById("orientacaoPlaca").value || "horizontal";
+  preview3D.update({
+    largura: Number.isFinite(l) && l > 0 ? l : 4,
+    comprimento: Number.isFinite(c) && c > 0 ? c : 5,
+    altura: 2.8,
+    larguraPlaca: 0.2,
+    orientacao: orientacaoPlaca
+  });
+}
+
+function renderResult(r) {
+  const el = document.getElementById('resultado');
+  lastResult = r;
+  const conferenciaHtml = (r.conferencias || [])
+    .map(item => `<li>${item}</li>`)
+    .join("");
+  el.innerHTML = `
+    <div class="result">
+      <div class="result-head">Resultado</div>
+      <div class="result-item"><span class="label">Área</span><span class="value">${r.area.toFixed(2)} m²</span></div>
+      <div class="result-item"><span class="label">Placas</span><span class="value">${r.placas}</span></div>
+      <div class="result-item"><span class="label">Comp. Placa</span><span class="value">${r.compPlaca} m</span></div>
+      <div class="result-item"><span class="label">Sentido</span><span class="value">${r.orientacao === "vertical" ? "Vertical" : "Horizontal"}</span></div>
+      <div class="result-item"><span class="label">Metalon</span><span class="value">${r.metalon}</span></div>
+      <div class="result-item"><span class="label">Arremate</span><span class="value">${r.arremate}</span></div>
+      <div class="result-item"><span class="label">Parafuso Forro</span><span class="value">${r.parafusoForro}</span></div>
+      <div class="result-item"><span class="label">Parafuso Estrutura</span><span class="value">${r.parafusoEstrutura}</span></div>
+      <div class="result-item"><span class="label">Isolante</span><span class="value">${r.isolanteM2.toFixed(2)} m²</span></div>
+      <div class="result-item"><span class="label">Pacotes de Isolante (5 m²)</span><span class="value">${r.isolantePacotes}</span></div>
+      <div class="conferencia">
+        <div class="conferencia-title">Conta aplicada</div>
+        <ul class="conferencia-list">${conferenciaHtml}</ul>
+      </div>
+      <div class="result-pdf">
+        <button class="btn btn-outline" onclick="gerarPDF()">
+          <i class="fas fa-file-pdf"></i> Exportar PDF
+        </button>
+      </div>
+    </div>`;
+}
+
+function calcular(persist = true) {
+  const l = parseMetricValue("largura");
+  const c = parseMetricValue("comprimento");
+  const barraArremate = Number.parseFloat(document.getElementById("barraArremate").value || "6");
+  const orientacaoPlaca = document.getElementById("orientacaoPlaca").value || "horizontal";
+  const el = document.getElementById('resultado');
+
+  if (isNaN(l) || isNaN(c) || l <= 0 || c <= 0) {
+    el.innerHTML = '<p style="color:#dc2626;font-size:0.85rem;margin-top:12px;"><i class="fas fa-exclamation-circle"></i> Preencha valores válidos.</p>';
+    return;
+  }
+
+  const r = calcularForro(l, c, 0.2, barraArremate, 5, orientacaoPlaca);
+  renderResult(r);
+  update3DFromInputs();
+  if (persist) {
+    CalcHistory.saveCalculation(CALC_TYPE, {
+      inputs: { largura: l, comprimento: c, barraArremate, orientacaoPlaca },
+      result: r
+    });
+  }
+  renderHistory();
+}
+
+function gerarPDF() {
+  if (!lastResult) return;
+  generatePDF('forro', {
+    'Área': lastResult.area.toFixed(2) + ' m²',
+    'Orientação': lastResult.orientacao === "vertical" ? 'Vertical' : 'Horizontal',
+    'Placas': lastResult.placas,
+    'Comp. Placa': lastResult.compPlaca + ' m',
+    'Metalon': lastResult.metalon,
+    'Arremate': lastResult.arremate,
+    'Parafuso Forro': lastResult.parafusoForro,
+    'Parafuso Estrutura': lastResult.parafusoEstrutura,
+    'Isolante': lastResult.isolanteM2.toFixed(2) + ' m²',
+    'Pacotes Isolante (5 m²)': lastResult.isolantePacotes
+  }, user);
+}
+
+function toggleMenu() { document.getElementById('dropMenu').classList.toggle('open'); }
+document.addEventListener('click', e => {
+  if (!e.target.closest('.topbar-user')) {
+    document.getElementById('dropMenu')?.classList.remove('open');
+  }
+});
+function doLogout() { Auth.logout(); window.location.href = '../login.html'; }
+
+(function bootstrapHistory() {
+  preview3D.init();
+  update3DFromInputs();
+  renderHistory();
+})();
+
+["largura", "comprimento", "orientacaoPlaca"].forEach(id => {
+  document.getElementById(id).addEventListener("input", update3DFromInputs);
+  document.getElementById(id).addEventListener("change", update3DFromInputs);
+});
+</script>
+</body>
+</html>
